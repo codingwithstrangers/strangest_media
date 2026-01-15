@@ -1,0 +1,336 @@
+# Strangest Media – Multi-Platform Content Automation (Design Document)
+
+## 1. Overview
+
+### Problem
+
+In a single day, I can generate:
+
+* 50 short-form videos
+* 12 text posts
+* 4 long-form videos
+* 3 audio-only podcast episodes
+
+However, I am unable to reliably **post or schedule this content across multiple platforms** due to:
+
+* Manual upload overhead
+* Platform-specific metadata requirements
+* Lack of bulk scheduling tools
+* Time constraints
+
+This creates a bottleneck between **content creation** and **distribution**.
+
+---
+
+## 2. Goals (The Ask)
+
+We want a **Python-based local system** that:
+
+1. Tracks, schedules, and uploads content from my local CPU
+2. Uploads content to platforms in **private / draft / unlisted / public ** mode only
+3. Allows titles, descriptions, tags, and platform-specific metadata to be managed via **CSV**
+4. Tracks upload status and completion state per platform
+5. Acts as a single source of truth for:
+
+   * Content created
+   * Content uploaded
+   * Content posted / scheduled
+   * Content completed
+
+---
+
+## 3. Target Platforms
+
+### Long-Form Content
+
+* YouTube
+* LinkedIn
+* Substack
+* Reddit
+* Discord
+* Facebook
+* Patreon
+
+### Short-Form Content
+
+* Twitch (clips / highlights)
+* YouTube Shorts
+* X (Twitter)
+* Bluesky
+* Instagram
+* TikTok
+* Discord
+* Patreon
+* Webtoon (comic home page message board for fans)
+
+---
+
+## 4. Core Architecture (High Level)
+
+```text
+Local Machine (CPU)
+│
+├── media/
+│   ├── shorts/
+│   ├── long_form/
+│   ├── audio/
+│   └── text/
+│
+├── metadata/
+│   └── content_manifest.csv
+│
+├── uploads/
+│   ├── youtube.py
+│   ├── twitter.py
+│   ├── tiktok.py
+│   └── ...
+│
+├── scheduler/
+│   └── run_uploads.py
+│
+└── logs/
+    └── upload_status.log
+```
+## Folder Strcture 
+```
+strangest_media/
+│
+├── config/
+│   ├── settings.py          # global constants, paths, enums
+│   └── platforms.py         # platform capability matrix
+│
+├── credentials/
+│   └── placeholder.py       # temp stubs for youtube_credential, etc
+│
+├── core/
+│   ├── csv_loader.py        # load/validate CSV
+│   ├── models.py            # dataclasses for ContentItem
+│   ├── state_manager.py     # update status back to CSV
+│   ├── dispatcher.py        # routes content → correct platform uploader
+│   └── logger.py            # centralized logging
+│
+├── platforms/
+│   ├── base.py              # abstract platform interface
+│   ├── youtube.py
+│   ├── twitter.py
+│   ├── instagram.py
+│   ├── tiktok.py
+│   ├── linkedin.py
+│   ├── reddit.py
+│   ├── discord.py
+│   └── bluesky.py
+│
+├── scheduler/
+│   └── run_uploads.py       # main entrypoint
+│
+├── metadata/
+│   └── content_manifest.csv
+│
+├── logs/
+│   └── upload.log
+│
+├── media/
+│   ├── shorts/
+│   ├── long_form/
+│   ├── audio/
+│   └── text/
+│
+├── .env
+├── requirements.txt
+└── README.md
+
+```
+All control flows through **CSV → Python → Platform APIs**.
+
+---
+
+## 5. CSV-Driven Workflow
+
+### Content Manifest CSV (Single Source of Truth)
+
+Required columns:
+
+* `content_id`
+* `content_type` (short | long | audio | text | comic)
+* `file_path`
+* `platform`
+* `title`
+* `description`
+* `tags`
+* `visibility` (private | draft | unlisted)
+* `status` (pending | uploaded | failed | posted)
+* `upload_timestamp`
+* `error_notes`
+
+This CSV will:
+
+* Drive uploads
+* Track completion
+* Prevent duplicate posts
+* Allow resuming after failures
+
+---
+
+## 6. Python Responsibilities
+
+Python will:
+
+1. Read and validate CSV entries
+2. Check file existence and format
+3. Authenticate with each platform API
+4. Upload media in **non-public mode**
+5. Update upload results back into CSV
+6. Log failures and retry safely
+
+Python libraries expected:
+
+* `pandas`
+* `requests`
+* `google-api-python-client`
+* `tweepy`
+* `instagrapi`
+* `schedule` or `apscheduler`
+
+---
+
+## 7. Platform Credentials & Access Requirements
+
+### YouTube
+
+* Google Cloud Project
+* OAuth 2.0 Client ID
+* YouTube Data API v3
+
+### LinkedIn
+
+* LinkedIn Developer App
+* OAuth 2.0
+* Requires business / creator approval for video uploads
+* You need 150 connections
+
+### Reddit
+
+* Reddit App (script type)
+* Client ID & Secret
+* OAuth token
+
+### Discord
+
+* Bot Token
+* Server permissions
+* Channel IDs
+
+### Substack
+
+* No official public API
+* Requires email-based token or automation workaround
+
+### Twitter (X)
+
+* Developer Account
+* OAuth 2.0 or OAuth 1.0a
+* Paid tier likely required for media uploads
+
+### Bluesky
+
+* App Password
+* AT Protocol client
+
+### Instagram
+
+* Instagram Graph API (Business / Creator account)
+* Facebook App
+* Access Tokens
+
+### TikTok
+
+* TikTok Developer Account
+* OAuth 2.0
+* Content Posting API access request
+
+### Twitch
+
+* Twitch Developer App
+* Client ID & OAuth Token
+
+### Webtoon
+
+* No official upload API
+* Likely manual or browser automation required
+
+---
+
+## 8. Credential Management (Best Practice)
+
+* All secrets stored in `.env`
+* Never committed to Git
+* Loaded via `python-dotenv`
+
+Example:
+
+```env
+YOUTUBE_CLIENT_ID=
+TWITTER_BEARER_TOKEN=
+DISCORD_BOT_TOKEN=
+```
+
+---
+
+## 9. Potential Hurdles
+
+### API Limitations
+
+* Rate limits
+* Paid access tiers (Twitter, LinkedIn)
+* Missing APIs (Substack, Webtoon)
+
+### Upload Restrictions
+
+* File size limits
+* Encoding requirements
+* Aspect ratio enforcement
+
+### Account Requirements
+
+* Business or Creator accounts required
+* App review delays
+
+### Automation Risk
+
+* Browser automation risks TOS violations
+* Must prefer official APIs where possible
+
+---
+
+## 10. Suggested Workflow
+
+1. Create content
+2. Export metadata into CSV
+3. Place media files in structured folders
+4. Run Python scheduler
+5. Upload content as drafts/private
+6. Review platform UI
+7. Publish manually or auto-schedule later
+
+---
+
+## 11. Stretch Goals (Future)
+
+* Web UI dashboard
+* Google Sheets sync
+* Auto-captioning
+* Thumbnail automation
+* Analytics pullback into CSV
+
+---
+
+## 12. Summary
+
+This system prioritizes:
+
+* Local control
+* Platform compliance
+* Scalability of output
+* Separation of creation from distribution
+
+The goal is **industrial-scale media publishing** without burnout.
